@@ -9,12 +9,43 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from urllib.parse import quote
 
 
 class ProviderError(Exception):
     def __init__(self, provider, code, message):
         super().__init__(message)
         self.provider, self.code = provider, code
+
+
+def load_local_env(path=None):
+    """Load simple .env assignments without executing shell syntax.
+
+    Existing process variables always win. Values are read only from the
+    repository-local .env unless an explicit path is passed by the caller.
+    """
+    if path is None:
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as stream:
+            lines = stream.readlines()
+    except OSError:
+        return None
+    for line in lines:
+        raw = line.strip()
+        if not raw or raw.startswith("#") or "=" not in raw:
+            continue
+        name, value = raw.split("=", 1)
+        name = name.strip()
+        if not name or not name.replace("_", "a").isalnum() or name[0].isdigit():
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        os.environ.setdefault(name, value)
+    return path
 
 
 def _request(method, url, headers=None, payload=None, timeout=20):
@@ -47,10 +78,13 @@ class SuperlinkedRanker:
 
     def __init__(self, api_key=None, base_url=None, model=None, allow_fallback=True,
                  request_fn=None):
-        self.api_key = api_key or os.environ.get("SUPERLINKED_API_KEY") or os.environ.get("SIE_API_KEY", "")
-        self.base_url = (base_url or os.environ.get("SUPERLINKED_SIE_URL") or
+        load_local_env()
+        self.api_key = (api_key if api_key is not None else
+                        os.environ.get("SUPERLINKED_API_KEY") or os.environ.get("SIE_API_KEY", ""))
+        self.base_url = (base_url if base_url is not None else
+                         os.environ.get("SUPERLINKED_SIE_URL") or
                          "https://api.superlinked.com/v1").rstrip("/")
-        self.model = model or os.environ.get("SUPERLINKED_MODEL", "")
+        self.model = (model if model is not None else os.environ.get("SUPERLINKED_MODEL", ""))
         self.allow_fallback = allow_fallback
         self.request_fn = request_fn or _request
 
@@ -77,7 +111,7 @@ class SuperlinkedRanker:
         started = time.perf_counter()
         try:
             _, body, headers, _ = self.request_fn(
-                "POST", self.base_url + "/score",
+                "POST", self.base_url + "/score/" + quote(self.model, safe="/"),
                 {"Authorization": "Bearer " + self.api_key}, payload)
             scores = self._parse_scores(body, {c.product.id for c in candidates})
             return {"provider": self.provider, "status": "success", "model": body.get("model", self.model),
@@ -125,6 +159,7 @@ class SensoClient:
     provider = "senso"
 
     def __init__(self, api_key=None, base_url=None, request_fn=None):
+        load_local_env()
         self.api_key = api_key or os.environ.get("SENSO_API_KEY", "")
         self.base_url = (base_url or os.environ.get("SENSO_BASE_URL") or
                          "https://apiv2.senso.ai/api/v1").rstrip("/")
@@ -135,7 +170,8 @@ class SensoClient:
         return bool(self.api_key)
 
     def _headers(self):
-        return {"X-API-Key": self.api_key, "X-Senso-Signals": "off"}
+        return {"X-API-Key": self.api_key,
+                "User-Agent": "RELAY-shopping-agent/1.0"}
 
     def health(self):
         if not self.configured:

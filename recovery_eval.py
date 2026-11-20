@@ -7,6 +7,7 @@ from paypilot.mock_paypal import MockPayPal
 from paypilot.paypal import PayPalClient
 from paypilot.policy import Policy
 from paypilot.recovery import Cart, RecoveryError, RecoveryMission, RecoveryState
+from paypilot.integrations import SuperlinkedRanker
 
 
 PRODUCTS = load_catalog("examples/catalog.csv")
@@ -14,8 +15,11 @@ PRODUCTS = load_catalog("examples/catalog.csv")
 
 def mission(products=PRODUCTS, policy=None):
     mock = MockPayPal()
+    # Keep acceptance tests deterministic and independent of developer-local
+    # sponsor credentials; live sponsor smoke tests run separately.
+    ranker = SuperlinkedRanker(api_key="", model="")
     return RecoveryMission(products, policy=policy,
-                           paypal=PayPalClient(mock=mock)), mock
+                           paypal=PayPalClient(mock=mock), ranker=ranker), mock
 
 
 def expect(name, condition):

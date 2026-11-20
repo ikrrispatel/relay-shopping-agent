@@ -21,7 +21,9 @@ def check(name, condition):
 def main():
     cands = search(PRODUCTS, keywords=["charger"], category="electronics",
                    max_price=60, required_keywords=["charger", "laptop"])
+    captured = {}
     def sie_request(method, url, headers, payload):
+        captured.update({"method": method, "url": url, "headers": headers, "payload": payload})
         return 200, {"model": payload["model"], "query_id": "q-test",
                      "scores": [{"item_id": c.product.id, "score": float(i), "rank": i}
                                 for i, c in enumerate(reversed(cands))]}, {"X-Request-Id": "req-test"}, 0
@@ -29,12 +31,20 @@ def main():
                                request_fn=sie_request)
     result = ranker.rank("charger", cands)
     check("sie_parses_scores", result["status"] == "success")
+    check("sie_uses_model_path", captured["url"].endswith("/score/serverless-test-model"))
+    check("sie_uses_bearer_auth", captured["headers"].get("Authorization", "").startswith("Bearer "))
+    check("sie_uses_documented_request_shape",
+          captured["payload"]["query"] == {"text": "charger"} and
+          len(captured["payload"]["items"]) == len(cands))
     check("sie_preserves_item_mapping", set(x["item_id"] for x in result["scores"]) == {c.product.id for c in cands})
     check("sie_returns_provider_metadata", result["correlation_id"] == "q-test" and result["model"] == "serverless-test-model")
     bad = SuperlinkedRanker(api_key="test-key", model="serverless-test-model",
                             request_fn=lambda *a: (200, {"scores": [{"item_id": "not-eligible", "score": 1}]}, {}, 0))
     check("sie_rejects_unknown_candidates", bad.rank("charger", cands)["status"] == "error")
-    check("sie_unconfigured_is_explicit", SuperlinkedRanker().rank("charger", cands)["status"] == "unconfigured")
+    # Explicit empty injection keeps this test hermetic even when a developer
+    # has real sponsor credentials in the repository-local .env.
+    check("sie_unconfigured_is_explicit",
+          SuperlinkedRanker(api_key="", model="").rank("charger", cands)["status"] == "unconfigured")
 
     def senso_request(method, url, headers, payload=None):
         if method == "POST":
