@@ -1,0 +1,13 @@
+{
+  "name": "RELAY",
+  "short_name": "RELAY",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#e6d4f4",
+  "background_color": "#ffffff",
+  "icons": [
+    {"src":"/static/icons/icon-192.svg","sizes":"192x192","type":"image/svg+xml","purpose":"any maskable"},
+    {"src":"/static/icons/icon-512.svg","sizes":"512x512","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}

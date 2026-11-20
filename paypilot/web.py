@@ -192,6 +192,9 @@ def make_handler(catalog_path, live):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body.encode("utf-8"))))
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Referrer-Policy", "same-origin")
             self.end_headers()
             self.wfile.write(body.encode("utf-8"))
 
@@ -210,6 +213,14 @@ def make_handler(catalog_path, live):
             if path == "/" or path == "/recovery":
                 ui_path = Path(__file__).with_name("static") / "relay_consumer.html"
                 self._send(ui_path.read_text(encoding="utf-8"))
+                return
+            if path in ("/manifest.webmanifest", "/sw.js") or path.startswith("/static/icons/"):
+                asset = Path(__file__).with_name("static") / ("manifest.webmanifest" if path == "/manifest.webmanifest" else "sw.js" if path == "/sw.js" else Path(path).relative_to("/static"))
+                if asset.is_file():
+                    ctype = "application/manifest+json" if path.endswith("webmanifest") else "application/javascript" if path.endswith(".js") else "image/svg+xml"
+                    self._send(asset.read_text(encoding="utf-8"), ctype=ctype)
+                    return
+                self._send("not found", 404, "text/plain")
                 return
             if path.startswith("/static/products/"):
                 asset = Path(__file__).with_name("static") / "products" / Path(path).name
