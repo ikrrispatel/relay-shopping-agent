@@ -1,5 +1,5 @@
 const CACHE = "relay-shell-v1";
-const SHELL = ["/", "/manifest.webmanifest", "/static/icons/icon-192.svg", "/static/icons/icon-512.svg"];
+const SHELL = ["/manifest.webmanifest", "/static/icons/icon-192.svg", "/static/icons/icon-512.svg"];
 self.addEventListener("install", event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL))));
 self.addEventListener("activate", event => event.waitUntil(self.clients.claim()));
 self.addEventListener("fetch", event => {
