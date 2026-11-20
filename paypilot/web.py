@@ -8,6 +8,7 @@ start with `serve --live` to point at the real sandbox.
 import html
 import json
 import os
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -206,6 +207,17 @@ def make_handler(catalog_path, live):
 
         def do_GET(self):
             path = urlparse(self.path).path
+            if path == "/" or path == "/recovery":
+                ui_path = Path(__file__).with_name("static") / "relay_consumer.html"
+                self._send(ui_path.read_text(encoding="utf-8"))
+                return
+            if path.startswith("/static/products/"):
+                asset = Path(__file__).with_name("static") / "products" / Path(path).name
+                if asset.is_file() and asset.suffix == ".svg":
+                    self._send(asset.read_text(encoding="utf-8"), ctype="image/svg+xml")
+                    return
+                self._send("not found", 404, "text/plain")
+                return
             if path.startswith("/healthz"):
                 self._send('{"ok":true}', ctype="application/json")
                 return

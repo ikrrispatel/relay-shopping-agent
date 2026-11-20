@@ -10,3 +10,7 @@
 Imported components include the Python package, catalog and example data, offline/LLM reasoning interfaces, agent orchestration, deterministic policy engine, mock and PayPal clients, receipts, REST API, web interface, CLI, audit grid, Renewal Radar, OpenAPI specification, evaluation suite, and runtime configuration.
 
 RELAY changes include the recovery state machine, cart-bound authorization, revalidation and replacement flow, idempotent mock checkout, structured recovery audit, recovery API/UI, RELAY configuration placeholders, repository hygiene, and project documentation. The internal `paypilot` package name is retained to avoid breaking inherited imports and tests. No upstream Git metadata was imported, and this repository is not a fork. Redundant upstream README copies were consolidated into [docs/UPSTREAM_NOTICE.md](docs/UPSTREAM_NOTICE.md); the required MIT license and copyright notice remain intact.
+
+## OpenShip Marketplace presentation reference
+
+RELAY's consumer-facing conversation layout, interactive product-card treatment, cart approval presentation, and restrained motion language are adapted from the MIT-licensed [OpenShip Marketplace](https://github.com/openshiporg/marketplace), copyright (c) 2025 openship. The upstream MIT notice is retained here for the adapted presentation patterns. RELAY does not import OpenShip's commerce backend, MCP transport, merchant adapters, payment handling, or APIs; all actions in this UI call RELAY's existing Python recovery API and remain mock-checkout only.

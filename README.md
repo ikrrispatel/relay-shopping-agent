@@ -18,7 +18,7 @@ python3 recovery_eval.py
 python3 -m paypilot serve --port 8780
 ```
 
-Then open <http://127.0.0.1:8780/recovery> and use the recovery console, or run the existing scripted demo at `python3 -m paypilot demo`.
+Then open <http://127.0.0.1:8780/> for the consumer shopping experience, or run the existing scripted demo at `python3 -m paypilot demo`. The legacy recovery route remains available at `/recovery`.
 
 The canonical recovery scenario is:
 
@@ -74,6 +74,7 @@ Key modules:
 - `paypilot/policy.py` — hard spending decisions that the model cannot override.
 - `paypilot/mock_paypal.py` / `paypilot/paypal.py` — deterministic mock and PayPal Sandbox-compatible checkout boundaries.
 - `paypilot/api.py` / `paypilot/web.py` — existing API/UI architecture plus recovery lifecycle routes and `/recovery`.
+- `paypilot/static/relay_consumer.html` — RELAY's consumer-facing conversational shopping UI, adapted from OpenShip Marketplace's MIT-licensed presentation patterns and wired to the existing recovery API.
 - `paypilot/integrations.py` — Senso context retrieval, Superlinked SIE scoring, and explicit Firedrill connection status.
 - `recovery_eval.py` — Phase 2 acceptance tests.
 - `integrations_eval.py` — sanitized SIE/Senso response and safety contract tests.
@@ -133,6 +134,8 @@ Mock mode is the default and is the recommended development/test mode. Never com
 SIE and Senso are implemented as opt-in adapters. No live sponsor smoke test is claimed for this checkout because the environment has no sponsor credentials. Firedrill requires separate OAuth/MCP or official-runner authorization; once authorized, the first drill should target the existing `/api/v1/recovery/*` flow and retain the returned operation/report identifiers.
 
 The sponsor roadmap is documented in [docs/INTEGRATION_PLAN.md](docs/INTEGRATION_PLAN.md), and the implemented recovery contract is documented in [docs/RECOVERY_WORKFLOW.md](docs/RECOVERY_WORKFLOW.md).
+
+The final UI deliberately keeps commerce actions inside RELAY's existing recovery boundary: product cards, exact-cart approval, test-only inventory failure, fresh replacement approval, receipt, provenance, and audit events all come from the Python API. OpenShip Marketplace is credited as the MIT-licensed presentation reference in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md); its commerce backend, merchant APIs, and payment handling are not imported.
 
 ## Open-source attribution
 
