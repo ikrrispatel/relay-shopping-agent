@@ -19,6 +19,7 @@ from .paypal import PayPalClient
 from .policy import Policy
 from .reasoning import get_brain
 from .renewals import (analyze, parse_transactions_csv, render_renewals_page)
+from .recovery import RecoveryService, render_recovery_page
 
 E = html.escape
 
@@ -58,7 +59,8 @@ h2{font-size:16px;margin:0 0 8px}
 <p>Shopping that recovers when things go wrong. An evidence-backed personal shopping agent with policy guardrails.</p>
 <p><a href="/grid">Open the Policy Audit Grid &rarr;</a> <span class="mode">(every catalog item scored against the policy engine, in AG Grid)</span>
 &middot; <a href="/docs">API docs</a> <span class="mode">(OpenAPI 3.0.3 + Swagger UI)</span>
-&middot; <a href="/renewals">Renewal Radar</a> <span class="mode">(subscriptions, price hikes, duplicates, polite nudges)</span></p></header>
+&middot; <a href="/renewals">Renewal Radar</a> <span class="mode">(subscriptions, price hikes, duplicates, polite nudges)</span></p>
+<p><a href="/recovery">Open the autonomous recovery console &rarr;</a> <span class="mode">(cart-bound approval, stale checkout, replacement approval)</span></p></header>
 <div class="card">
 <form method="post" action="/run">
 <label for="req">What should the agent buy?</label>
@@ -153,6 +155,13 @@ def make_handler(catalog_path, live):
     from .cli import SCENARIOS
     products_cache = load_catalog(catalog_path)
 
+    recovery_service = RecoveryService(
+        products_cache,
+        paypal_factory=lambda: PayPalClient(mock=MockPayPal()) if not live else
+        PayPalClient(client_id=os.environ.get("PAYPAL_CLIENT_ID", ""),
+                     secret=os.environ.get("PAYPAL_SECRET", "")),
+        test_mode=not live)
+
     txn_path = os.environ.get("PAYPILOT_TRANSACTIONS") or os.path.join(
         os.path.dirname(__file__), "..", "examples", "transactions.csv")
     try:
@@ -221,6 +230,9 @@ def make_handler(catalog_path, live):
             if path.startswith("/renewals"):
                 self._send(render_renewals_page(txns_cache))
                 return
+            if path.startswith("/recovery"):
+                self._send(render_recovery_page())
+                return
             if path.startswith("/api/"):
                 from .api import dispatch, ok, to_json
                 if path.startswith("/api/v1/renewals"):
@@ -228,7 +240,8 @@ def make_handler(catalog_path, live):
                                "application/json")
                     return
                 status, body = dispatch(products_cache, make_agent, live,
-                                        path, "GET", self._query(), None)
+                                        path, "GET", self._query(), None,
+                                        recovery_service=recovery_service)
                 self._send(to_json(body), status, "application/json")
                 return
             page = _render_page("", "", "",
@@ -254,7 +267,8 @@ def make_handler(catalog_path, live):
                     self._send(to_json(body), status, "application/json")
                     return
                 status, body = dispatch(products_cache, make_agent, live,
-                                        path, "POST", {}, payload)
+                                        path, "POST", {}, payload,
+                                        recovery_service=recovery_service)
                 self._send(to_json(body), status, "application/json")
                 return
             n = int(self.headers.get("Content-Length", 0))

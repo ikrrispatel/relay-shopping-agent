@@ -80,9 +80,11 @@ class PayPalClient:
             raise PayPalError("no access_token in PayPal response: %r" % d)
         return self._token
 
-    def create_order(self, amount, currency="USD", description="", ref_id=""):
+    def create_order(self, amount, currency="USD", description="", ref_id="",
+                     idempotency_key=None):
         if self.mock:
-            return self.mock.create_order(amount, currency, description, ref_id)
+            return self.mock.create_order(amount, currency, description, ref_id,
+                                          idempotency_key=idempotency_key)
         body = {
             "intent": "CAPTURE",
             "purchase_units": [{
@@ -91,8 +93,11 @@ class PayPalClient:
                 "reference_id": ref_id[:256],
             }],
         }
+        headers = self._auth_headers()
+        if idempotency_key:
+            headers["PayPal-Request-Id"] = idempotency_key
         return _post(self.base_url + "/v2/checkout/orders",
-                     json.dumps(body).encode(), self._auth_headers())
+                     json.dumps(body).encode(), headers)
 
     def capture_order(self, order_id):
         if self.mock:

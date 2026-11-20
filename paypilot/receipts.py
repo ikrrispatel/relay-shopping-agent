@@ -90,7 +90,7 @@ def render(res):
  .detail{font-size:14px;margin:4px 0}
  ul.ev{margin:4px 0 0;padding-left:18px;color:#5a6472;font-size:12.5px}
 </style></head><body><div class="card">
-<h1>PayPilot receipt</h1>
+<h1>RELAY receipt</h1>
 <table>__SUMMARY__</table>
 <h1>Decision trail</h1>
 __TRAIL__

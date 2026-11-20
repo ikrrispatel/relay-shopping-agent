@@ -182,12 +182,38 @@ def run_agent(agent_factory, payload):
     return ok(data, paypal_mode=getattr(agent, "mode", "unknown"))
 
 
+def recovery_route(recovery_service, path, method, payload):
+    """Route mission lifecycle calls while keeping the existing envelope."""
+    from .recovery import RecoveryError
+    parts = [p for p in path.split("/") if p]
+    try:
+        if path == "/api/v1/recovery/start" and method == "POST":
+            return ok(recovery_service.start(payload).to_dict())
+        if len(parts) >= 4 and parts[2] == "recovery":
+            mission_id = parts[3]
+            if len(parts) == 4 and method == "GET":
+                return ok(recovery_service.get(mission_id).to_dict())
+            if len(parts) == 5 and method == "POST":
+                return ok(recovery_service.handle(mission_id, parts[4], payload).to_dict())
+    except RecoveryError as exc:
+        status = 409 if exc.code in ("CART_APPROVAL_MISMATCH", "INVALID_STATE_TRANSITION",
+                                     "APPROVAL_NOT_ALLOWED", "CHECKOUT_NOT_APPROVED") else 400
+        return err(exc.code, str(exc), status=status)
+    return None
+
+
 # ------------------------------------------------------------------ dispatch
 
-def dispatch(products, agent_factory, live, path, method, params, payload):
+def dispatch(products, agent_factory, live, path, method, params, payload,
+             recovery_service=None):
     """Route an /api/v1/* call. Returns (status_code, json_body_dict)."""
     if path == "/api/v1/health":
         return health(products, live)
+    if recovery_service and path.startswith("/api/v1/recovery"):
+        routed = recovery_route(recovery_service, path, method,
+                                payload if isinstance(payload, dict) else {})
+        if routed is not None:
+            return routed
     if path == "/api/v1/catalog":
         return list_catalog(products, params)
     if path == "/api/v1/context":

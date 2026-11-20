@@ -49,7 +49,7 @@ def make_agent(policy=None, daily_spent=0.0):
 
 def main():
     # ---- catalog ------------------------------------------------------
-    check("catalog_loads_all_products", len(PRODUCTS) == 17,
+    check("catalog_loads_all_products", len(PRODUCTS) == 19,
           "got %d" % len(PRODUCTS))
     check("catalog_out_of_stock_excluded",
           all(p.stock > 0 for p in PRODUCTS))

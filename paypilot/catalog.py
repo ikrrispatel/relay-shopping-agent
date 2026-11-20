@@ -47,7 +47,7 @@ class Candidate:
 
 
 def search(products, keywords=None, category=None, max_price=None,
-           sort="value", in_stock_only=True):
+           sort="value", in_stock_only=True, required_keywords=None):
     """Rank products against an intent.
 
     Every candidate carries evidence strings explaining why it matched,
@@ -63,6 +63,10 @@ def search(products, keywords=None, category=None, max_price=None,
             continue
         if max_price is not None and p.price > max_price:
             continue
+        if required_keywords:
+            hay = " ".join([p.name, p.category] + p.tags).lower()
+            if any(k.lower() not in hay for k in required_keywords):
+                continue
         ev = ["in stock (%d units)" % p.stock, "rating %.1f/5" % p.rating]
         if max_price is not None:
             ev.append("price $%.2f within budget $%.2f (headroom $%.2f)"

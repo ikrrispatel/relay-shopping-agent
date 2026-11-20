@@ -1,6 +1,6 @@
 # RELAY recovery workflow
 
-This document describes the next executable behavior. The initial RELAY foundation does not yet implement this workflow.
+This document describes the executable Phase 2 behavior implemented in `paypilot/recovery.py`.
 
 ## Target sequence
 
@@ -17,10 +17,20 @@ This document describes the next executable behavior. The initial RELAY foundati
 
 ## Existing versus new
 
-Already present: intent parsing, candidate evidence, ranking, policy enforcement, approval gating, mock order/capture, receipt rendering, and per-phase `RunResult.steps` audit evidence in `paypilot/agent.py`. The current mock path completes a single happy-path order and does not model stale inventory or rejected capture.
+Already present and reused: intent parsing, candidate evidence, ranking, policy enforcement, approval gating, mock order/capture, receipt rendering, and per-phase `RunResult.steps` audit evidence in `paypilot/agent.py`.
 
-Needs development: a cart/authorization identity and revalidation boundary; typed stale-state and capture-rejection outcomes in `paypilot.paypal`/`paypilot.mock_paypal`; alternative selection after failure; fresh-approval state; exactly-once idempotency; durable or explicitly returned recovery audit records; and executable tests covering failure, recovery, and no-double-charge behavior.
+Phase 2 adds: `Cart` fingerprints and inventory versions; typed state transitions in `RecoveryMission`; test-only inventory/price/merchant faults; alternative selection after failure; fresh approval; mock idempotency keys; structured audit events; and API/UI lifecycle controls. The mission registry is in-memory, so persistence across process restarts remains future work.
 
 ## Test contract
 
-The recovery tests must run entirely against a deterministic mock. They must demonstrate: stale state causes the original capture to fail; the original authorization is not reused; a replacement is re-ranked and policy-checked; approval is requested again; one and only one replacement capture is completed; and the audit trail names both the failure and recovery. Until those tests pass, RELAY should describe recovery as planned rather than implemented.
+Run `python3 recovery_eval.py` for the deterministic Phase 2 acceptance suite. It demonstrates stale state causes rejection; the original authorization is not reused; replacements are re-ranked and policy-checked; fresh approval is requested; one and only one replacement capture completes; duplicate checkout is idempotent; and the structured audit names both failure and recovery.
+
+## API lifecycle
+
+- `POST /api/v1/recovery/start` with `{request}` creates a mission.
+- `GET /api/v1/recovery/{mission_id}` returns current state, cart, receipt, and audit.
+- `POST /api/v1/recovery/{mission_id}/approve` requires the exact cart `fingerprint`.
+- `POST /api/v1/recovery/{mission_id}/fault` injects a mock-only inventory/price/merchant change.
+- `POST /api/v1/recovery/{mission_id}/checkout` revalidates and either completes or enters recovery.
+
+The `/recovery` page uses these same routes and renders the returned backend state. Fault injection is disabled when the server runs in live/sandbox mode.

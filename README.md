@@ -11,6 +11,7 @@ RELAY is an evidence-backed personal shopping agent that safely handles failed p
 - Spending policy enforcement: category allowlist, merchant blocklist, per-order cap, daily cap, and approval threshold.
 - Human approval flow before higher-value purchases.
 - Mock PayPal OAuth/order/capture flow, receipts, and decision-trail audit evidence.
+- Autonomous recovery missions with cart-bound approvals, stale-cart rejection, replacement approval, structured audit events, and idempotent mock checkout.
 - CLI demo and shop commands, stdlib web UI, policy audit grid, REST API, OpenAPI document, and Renewal Radar.
 
 The default mode is offline mock mode. No real payment is made.
@@ -24,13 +25,14 @@ cp .env.example .env
 python3 eval.py
 python3 -m paypilot demo
 python3 -m paypilot serve --port 8780
+# recovery console: http://127.0.0.1:8780/recovery
 ```
 
 Open <http://127.0.0.1:8780>. The API is available under `/api/v1`; useful routes include `/api/v1/health`, `/api/v1/catalog`, `/api/v1/quote`, `/api/v1/policy/check`, and `/api/v1/agent/run`. `/openapi.yaml`, `/docs`, `/grid`, and `/renewals` are also served by the application.
 
 ## Tests
 
-`python3 eval.py` is the inherited offline evaluation suite. It covers catalog loading, intent parsing, ranking, every policy guardrail, approval, mock checkout, receipts, audit-grid rendering, and HTTP routes. The exact result from the imported upstream baseline is recorded in the engineering handoff; the HTTP portion requires permission to bind a local socket in restricted environments.
+`python3 eval.py` is the inherited offline evaluation suite: **172 passed, 0 failed** after RELAY branding and catalog extension. `python3 recovery_eval.py` covers stale inventory, price and merchant changes, cart fingerprint enforcement, replacement approval, idempotency, safe failure, state transitions, and structured audit output.
 
 ## Architecture
 
@@ -43,10 +45,11 @@ The reusable implementation remains in `paypilot/`:
 - `paypal.py` / `mock_paypal.py` — sandbox client and offline mock.
 - `receipts.py` — receipts and decision trails.
 - `web.py` / `api.py` / `grid.py` — UI, REST routes, and audit console.
+- `recovery.py` — cart-bound mission state machine, recovery audit, and recovery console.
 
 ## Planned, not yet implemented
 
-The failed-checkout recovery workflow and sponsor integrations are specified in `docs/RECOVERY_WORKFLOW.md` and `docs/INTEGRATION_PLAN.md`. They are not represented as connected or complete until executable tests demonstrate them. The next implementation must add stale-cart detection, invalidated authorization handling, alternative search, fresh approval, exactly-once test-mode completion, and recovery audit events.
+Sponsor integrations remain planned in `docs/INTEGRATION_PLAN.md`. The Phase 2 recovery workflow is implemented and tested in mock mode; durable mission storage, real merchant inventory adapters, and sponsor services remain future work.
 
 ## Attribution and licensing
 

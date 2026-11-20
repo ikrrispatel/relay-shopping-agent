@@ -12,13 +12,17 @@ class MockPayPal:
         self.orders = {}
         self.tokens = []
         self.fail_next_capture = False
+        self.idempotency_orders = {}
 
     def token(self):
         tok = "MOCK-" + uuid.uuid4().hex[:16]
         self.tokens.append(tok)
         return tok
 
-    def create_order(self, amount, currency="USD", description="", ref_id=""):
+    def create_order(self, amount, currency="USD", description="", ref_id="",
+                     idempotency_key=None):
+        if idempotency_key and idempotency_key in self.idempotency_orders:
+            return self.orders[self.idempotency_orders[idempotency_key]]
         oid = "MOCK-ORDER-" + uuid.uuid4().hex[:10].upper()
         order = {
             "id": oid,
@@ -33,6 +37,8 @@ class MockPayPal:
             "created": time.time(),
         }
         self.orders[oid] = order
+        if idempotency_key:
+            self.idempotency_orders[idempotency_key] = oid
         return order
 
     def capture_order(self, order_id):

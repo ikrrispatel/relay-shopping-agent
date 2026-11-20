@@ -1,10 +1,10 @@
 openapi: 3.0.3
 info:
-  title: PayPilot API
+  title: RELAY API
   version: 1.1.0
   summary: An AI shopping agent with hard spending guardrails.
   description: |
-    PayPilot turns a natural-language shopping request into a policy-checked,
+    RELAY turns a natural-language shopping request into a policy-checked,
     evidence-cited purchase and a receipt.
 
     The loop is PERCEIVE -> SEARCH -> SELECT -> POLICY -> APPROVAL -> EXPLAIN
