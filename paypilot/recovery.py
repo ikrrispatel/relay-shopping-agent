@@ -7,6 +7,7 @@ catalog, policy, brain, and payment interfaces instead of replacing them.
 import copy
 import hashlib
 import json
+import os
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -15,6 +16,7 @@ from . import catalog as catalog_mod
 from .agent import _extract_capture
 from .policy import Policy, check as policy_check
 from .reasoning import OfflineBrain
+from .integrations import FiredrillRunner, SensoClient, SuperlinkedRanker
 
 
 class RecoveryError(Exception):
@@ -111,7 +113,8 @@ class RecoveryMission:
     """One purchase mission. User approvals are exact-cart and single-use."""
 
     def __init__(self, products, policy=None, brain=None, paypal=None,
-                 daily_spent=0.0, mission_id=None, test_mode=True):
+                 daily_spent=0.0, mission_id=None, test_mode=True,
+                 ranker=None, context_provider=None):
         self.products = products
         self.policy = policy or Policy()
         self.brain = brain or OfflineBrain()
@@ -119,6 +122,10 @@ class RecoveryMission:
         self.daily_spent = daily_spent
         self.mission_id = mission_id or "mission-" + uuid.uuid4().hex[:12]
         self.test_mode = bool(test_mode)
+        self.ranker = ranker or SuperlinkedRanker()
+        self.senso = context_provider or SensoClient()
+        self.integrations = {"firedrill": FiredrillRunner().status()}
+        self.require_senso = os.environ.get("RELAY_REQUIRE_SENSO_EVIDENCE", "0") == "1"
         self.state = None
         self.request = ""
         self.intent = None
@@ -173,6 +180,26 @@ class RecoveryMission:
                  "scarf", "socks", "mug", "watch", "book", "journal", "hub"}
         return [k for k in self.intent.keywords if k in nouns]
 
+    def _search_candidates(self):
+        sort = "price_asc" if self.intent.cheapest else "value"
+        candidates = catalog_mod.search(
+            self._runtime_products(), keywords=self.intent.keywords,
+            category=self.intent.category_hint or None,
+            max_price=self.intent.budget, sort=sort,
+            required_keywords=self._required_keywords())
+        context = self.senso.search_context(self.request, max_results=5)
+        self.integrations["senso"] = context
+        if self.require_senso and context.get("status") != "success":
+            return [], {"reason": "trusted Senso context required", "context": context}
+        rank = self.ranker.rank(self.request, candidates)
+        self.integrations["superlinked"] = rank
+        if rank.get("status") == "success":
+            by_id = {c.product.id: c for c in candidates}
+            candidates = [by_id[x["item_id"]] for x in rank["scores"]]
+        else:
+            rank["fallback"] = "local_catalog_score"
+        return candidates, {"context": context, "ranking": rank}
+
     def start(self, request_text):
         if self.state != RecoveryState.REQUEST_RECEIVED:
             raise RecoveryError("MISSION_ALREADY_STARTED", "mission has already started")
@@ -181,17 +208,14 @@ class RecoveryMission:
             self.transition(RecoveryState.FAILED, "empty request")
             raise RecoveryError("EMPTY_REQUEST", "request is required")
         self.intent = self.brain.parse(self.request)
-        sort = "price_asc" if self.intent.cheapest else "value"
-        self.candidates = catalog_mod.search(
-            self._runtime_products(), keywords=self.intent.keywords,
-            category=self.intent.category_hint or None,
-            max_price=self.intent.budget, sort=sort,
-            required_keywords=self._required_keywords())
+        self.candidates, search_details = self._search_candidates()
         if not self.candidates:
-            self.transition(RecoveryState.FAILED, "no eligible candidates")
+            self.transition(RecoveryState.FAILED, search_details.get("reason", "no eligible candidates"),
+                            details=search_details)
             return self
         self.transition(RecoveryState.CANDIDATES_FOUND,
-                        "ranked %d eligible candidate(s)" % len(self.candidates))
+                        "ranked %d eligible candidate(s)" % len(self.candidates),
+                        details=search_details)
         return self._prepare(self.candidates[0], initial=True)
 
     def _prepare(self, candidate, initial=False):
@@ -253,12 +277,7 @@ class RecoveryMission:
         return self
 
     def _find_replacement(self):
-        sort = "price_asc" if self.intent.cheapest else "value"
-        cands = catalog_mod.search(
-            self._runtime_products(), keywords=self.intent.keywords,
-            category=self.intent.category_hint or None,
-            max_price=self.intent.budget, sort=sort,
-            required_keywords=self._required_keywords())
+        cands, search_details = self._search_candidates()
         return [c for c in cands if c.product.id != self.cart.product_id]
 
     def checkout(self):
@@ -351,6 +370,7 @@ class RecoveryMission:
             "approval": self.approval, "order": self.order,
             "capture_id": self.capture_id, "failure_code": self.failure_code,
             "failure_reason": self.failure_reason,
+            "integrations": self.integrations,
             "audit": [asdict(e) for e in self.audit],
             "receipt": {"capture_id": self.capture_id,
                         "status": "completed" if self.state == RecoveryState.COMPLETED

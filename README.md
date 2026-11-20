@@ -41,6 +41,7 @@ RELAY selects a charger, waits for exact-cart approval, injects a test-only inve
 - Fresh approval for every replacement cart.
 - Stable idempotency keys and duplicate-checkout protection in mock mode.
 - Structured JSON audit events containing mission IDs, state transitions, cart fingerprints, policy codes, checkout attempts, and the actual final capture ID.
+- Optional live sponsor evidence and ranking through the real Senso context API and Superlinked SIE `/v1/score` adapter; missing providers are shown as unconfigured or local fallback, never as connected.
 
 ### Existing shopping foundation
 
@@ -73,7 +74,9 @@ Key modules:
 - `paypilot/policy.py` — hard spending decisions that the model cannot override.
 - `paypilot/mock_paypal.py` / `paypilot/paypal.py` — deterministic mock and PayPal Sandbox-compatible checkout boundaries.
 - `paypilot/api.py` / `paypilot/web.py` — existing API/UI architecture plus recovery lifecycle routes and `/recovery`.
+- `paypilot/integrations.py` — Senso context retrieval, Superlinked SIE scoring, and explicit Firedrill connection status.
 - `recovery_eval.py` — Phase 2 acceptance tests.
+- `integrations_eval.py` — sanitized SIE/Senso response and safety contract tests.
 
 Recovery API routes:
 
@@ -92,6 +95,7 @@ The current verified results are:
 ```text
 python3 eval.py          172 passed, 0 failed
 python3 recovery_eval.py all Phase 2 acceptance tests passed
+python3 integrations_eval.py all sponsor adapter contract tests passed
 ```
 
 The recovery suite covers normal checkout, out-of-stock recovery, price increases and decreases, merchant changes, quantity/fingerprint mismatch, fresh approval, duplicate submission idempotency, safe failure without a replacement, invalid transitions, and audit evidence for the failed and successful attempts.
@@ -125,6 +129,8 @@ Mock mode is the default and is the recommended development/test mode. Never com
 - SUPERLINKED SIE Serverless ranking behind the existing ranking boundary.
 - FIREDRILL adversarial recovery simulations.
 - Optional, redacted AMPLITUDE recovery-funnel events.
+
+SIE and Senso are implemented as opt-in adapters. No live sponsor smoke test is claimed for this checkout because the environment has no sponsor credentials. Firedrill requires separate OAuth/MCP or official-runner authorization; once authorized, the first drill should target the existing `/api/v1/recovery/*` flow and retain the returned operation/report identifiers.
 
 The sponsor roadmap is documented in [docs/INTEGRATION_PLAN.md](docs/INTEGRATION_PLAN.md), and the implemented recovery contract is documented in [docs/RECOVERY_WORKFLOW.md](docs/RECOVERY_WORKFLOW.md).
 
