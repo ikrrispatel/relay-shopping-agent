@@ -2,7 +2,7 @@
 import json
 
 from paypilot.catalog import load_catalog, search
-from paypilot.integrations import SensoClient, SuperlinkedRanker
+from paypilot.integrations import AmplitudeAnalytics, SensoClient, SuperlinkedRanker
 from paypilot.policy import Policy
 from paypilot.mock_paypal import MockPayPal
 from paypilot.paypal import PayPalClient
@@ -76,6 +76,15 @@ def main():
     check("sponsor_status_attached_to_mission", m.integrations["superlinked"]["status"] == "success" and m.integrations["senso"]["status"] == "success")
     check("sponsor_evidence_attached_to_audit", "fixture-content" in json.dumps(m.to_dict()["audit"]))
     check("no_api_key_in_serialized_audit", "test-key" not in json.dumps(m.to_dict()))
+    analytics_calls = []
+    analytics = AmplitudeAnalytics(api_key="analytics-test-key", session_id="relay-test-session",
+                                   request_fn=lambda method, url, headers, payload: (analytics_calls.append(payload) or (200, {}, {}, 0)))
+    analytics.emit_transition("CANDIDATES_FOUND", "mission-test", "ranked candidates")
+    check("analytics_emits_transition_event", analytics_calls[0]["events"][0]["event_type"] == "products_evaluated")
+    check("analytics_uses_pseudonymous_session", analytics_calls[0]["events"][0]["user_id"] == "relay-test-session")
+    failed = AmplitudeAnalytics(api_key="analytics-test-key", request_fn=lambda *a: (_ for _ in ()).throw(TimeoutError()))
+    failed.emit_transition("COMPLETED", "mission-test")
+    check("analytics_failure_is_non_blocking", len(failed.failures) == 1)
     print("ALL INTEGRATION TESTS PASSED")
 
 

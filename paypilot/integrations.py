@@ -66,6 +66,61 @@ def _request(method, url, headers=None, payload=None, timeout=20):
         raise ProviderError("http", "REQUEST_FAILED", str(exc))
 
 
+class AmplitudeAnalytics:
+    """Best-effort Amplitude HTTP V2 event ingestion.
+
+    Analytics is deliberately non-blocking: a provider outage must never stop
+    an approval, recovery, or mock checkout transition. Only pseudonymous
+    session metadata is sent; request text, cart fingerprints, and credentials
+    never leave RELAY.
+    """
+
+    provider = "amplitude"
+    EVENT_NAMES = {
+        "CANDIDATES_FOUND": "products_evaluated",
+        "CART_PREPARED": "recommendation_selected",
+        "AWAITING_APPROVAL": "approval_requested",
+        "CHECKOUT_REJECTED": "purchase_revalidation_failed",
+        "RECOVERY_SEARCH": "recovery_started",
+        "REPLACEMENT_PREPARED": "replacement_selected",
+        "REAPPROVAL_REQUIRED": "fresh_approval_requested",
+        "COMPLETED": "mock_checkout_completed",
+    }
+
+    def __init__(self, api_key=None, endpoint=None, session_id=None,
+                 request_fn=None):
+        load_local_env()
+        self.api_key = api_key if api_key is not None else os.environ.get("AMPLITUDE_API_KEY", "")
+        self.endpoint = (endpoint or os.environ.get("AMPLITUDE_ENDPOINT") or
+                         "https://api2.amplitude.com/2/httpapi")
+        self.session_id = session_id or os.environ.get(
+            "RELAY_DEMO_SESSION_ID", "relay-controlled-demo-session")
+        self.request_fn = request_fn or _request
+        self.status = "configured" if self.api_key else "unconfigured"
+        self.failures = []
+
+    def emit_transition(self, state, mission_id, details=None):
+        event_type = self.EVENT_NAMES.get(state)
+        if not event_type or not self.api_key:
+            return
+        safe = {"state": state, "test_mode": True}
+        if details:
+            safe["transition_detail"] = str(details)[:120]
+        payload = {"api_key": self.api_key, "events": [{
+            "user_id": self.session_id,
+            "event_type": event_type,
+            "time": int(time.time() * 1000),
+            "event_properties": safe,
+            "groups": {"relay_demo": "controlled"},
+        }]}
+        try:
+            code, _, _, _ = self.request_fn("POST", self.endpoint, {}, payload)
+            if code not in (200, 201, 202):
+                self.failures.append("HTTP_%s" % code)
+        except Exception as exc:
+            self.failures.append(type(exc).__name__)
+
+
 class SuperlinkedRanker:
     """SIE Serverless score adapter.
 

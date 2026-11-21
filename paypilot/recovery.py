@@ -16,7 +16,8 @@ from . import catalog as catalog_mod
 from .agent import _extract_capture
 from .policy import Policy, check as policy_check
 from .reasoning import OfflineBrain
-from .integrations import FiredrillRunner, SensoClient, SuperlinkedRanker
+from .integrations import (AmplitudeAnalytics, FiredrillRunner, SensoClient,
+                           SuperlinkedRanker)
 
 
 class RecoveryError(Exception):
@@ -114,7 +115,7 @@ class RecoveryMission:
 
     def __init__(self, products, policy=None, brain=None, paypal=None,
                  daily_spent=0.0, mission_id=None, test_mode=True,
-                 ranker=None, context_provider=None):
+                 ranker=None, context_provider=None, analytics=None):
         self.products = products
         self.policy = policy or Policy()
         self.brain = brain or OfflineBrain()
@@ -124,7 +125,10 @@ class RecoveryMission:
         self.test_mode = bool(test_mode)
         self.ranker = ranker or SuperlinkedRanker()
         self.senso = context_provider or SensoClient()
-        self.integrations = {"firedrill": FiredrillRunner().status()}
+        self.analytics = analytics or AmplitudeAnalytics(api_key="")
+        self.integrations = {"firedrill": FiredrillRunner().status(),
+                             "amplitude": {"provider": "amplitude",
+                                           "status": self.analytics.status}}
         self.require_senso = os.environ.get("RELAY_REQUIRE_SENSO_EVIDENCE", "0") == "1"
         self.state = None
         self.request = ""
@@ -162,6 +166,7 @@ class RecoveryMission:
             fingerprint=cart.fingerprint if cart else "",
             policy_code=policy_code, checkout_attempt=checkout_attempt,
             details=details or {}))
+        self.analytics.emit_transition(next_state, self.mission_id, reason)
 
     def _runtime_product(self, product):
         p = copy.copy(product)
@@ -351,6 +356,11 @@ class RecoveryMission:
         return self
 
     def to_dict(self):
+        self.integrations["amplitude"] = {
+            "provider": "amplitude",
+            "status": self.analytics.status,
+            "failed_events": len(self.analytics.failures),
+        }
         def product_dict(p):
             if not p:
                 return None
@@ -393,7 +403,8 @@ class RecoveryService:
                                   brain=OfflineBrain(),
                                   paypal=self.paypal_factory(),
                                   daily_spent=float(payload.get("daily_spent") or 0),
-                                  test_mode=self.test_mode)
+                                  test_mode=self.test_mode,
+                                  analytics=AmplitudeAnalytics())
         mission.start((payload.get("request") or "").strip())
         self.missions[mission.mission_id] = mission
         return mission
